@@ -24,14 +24,14 @@ const { IamAuthenticator } = require('ibm-watson/auth');
 const assistant = new AssistantV2({
   version: '2020-04-01',
   authenticator: new IamAuthenticator({
-    apikey: '3AsaG1wUi8ZJEA7KsVEKS3I40QGNVnT7jpuQqLI5CJLu',
+    apikey: process.env.ASSISTANT_IAM_APIKEY,
   }),
-  serviceUrl: 'https://api.us-south.assistant.watson.cloud.ibm.com',
+  serviceUrl: process.env.ASSISTANT_URL,
   
 });
 
 assistant.createSession({
-  assistantId: 'f688d844-4216-46b3-8957-0c8cc0adb521'
+  assistantId: process.env.WORKSPACE_ID
 })
   .then(res => {
     console.log(JSON.stringify(res.result, null, 2));
