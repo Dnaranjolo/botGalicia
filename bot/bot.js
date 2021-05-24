@@ -7,60 +7,48 @@
 // Import Botkit's core features
 const { Botkit } = require('botkit');
 const { BotkitCMSHelper } = require('botkit-plugin-cms');
+const { WatsonMiddleware } = require ('botkit-middleware-watson');
 
 // Import a platform-specific adapter for facebook.
 
 const { FacebookAdapter, FacebookEventTypeMiddleware } = require('botbuilder-adapter-facebook');
 
-const { MongoDbStorage } = require('botbuilder-storage-mongodb');
-
 // Load process.env values from .env file
 require('dotenv').config();
 
 
-const AssistantV2 = require('ibm-watson/assistant/v2');
-const { IamAuthenticator } = require('ibm-watson/auth');
-
-const assistant = new AssistantV2({
-  version: '2020-04-01',
-  authenticator: new IamAuthenticator({
-    apikey: process.env.ASSISTANT_IAM_APIKEY,
-  }),
-  serviceUrl: process.env.ASSISTANT_URL,
-  
+const watsonMiddleware = new WatsonMiddleware({
+  iam_apikey: '3AsaG1wUi8ZJEA7KsVEKS3I40QGNVnT7jpuQqLI5CJLu',
+  url: 'https://api.us-south.assistant.watson.cloud.ibm.com/instances/fb7a677d-06db-400d-9f7e-a6c130089f78',
+  workspace_id: 'f688d844-4216-46b3-8957-0c8cc0adb521',
+  version: '2018-09-20',
+  minimum_confidence: 0.5, // (Optional) Default is 0.75
 });
 
-assistant.createSession({
-  assistantId: process.env.WORKSPACE_ID
-})
-  .then(res => {
-    console.log(JSON.stringify(res.result, null, 2));
-  })
-  .catch(err => {
-    console.log(err);
-  });
 
+/*const AssistantV1 = require('ibm-watson/assistant/v1');
+const { IamAuthenticator } = require('ibm-watson/auth');
 
-let storage = null;
-if (process.env.MONGO_URI) {
-    storage = mongoStorage = new MongoDbStorage({
-        url : process.env.MONGO_URI,
-    });
-}
+const assistant = new AssistantV1({
+  version: '2018-09-20',
+  authenticator: new IamAuthenticator({
+    apikey: '3AsaG1wUi8ZJEA7KsVEKS3I40QGNVnT7jpuQqLI5CJLu',
+  }),
+  serviceUrl: 'https://api.us-south.assistant.watson.cloud.ibm.com/instances/fb7a677d-06db-400d-9f7e-a6c130089f78',
+});
+
+const params = {
+  workspaceId: 'f688d844-4216-46b3-8957-0c8cc0adb521'
+  }*/
+
 
 
 const adapter = new FacebookAdapter({
-
-    // REMOVE THIS OPTION AFTER YOU HAVE CONFIGURED YOUR APP!
-    enable_incomplete: true,
 
     verify_token: process.env.FACEBOOK_VERIFY_TOKEN,
     access_token: process.env.FACEBOOK_ACCESS_TOKEN,
     app_secret: process.env.FACEBOOK_APP_SECRET,
 })
-
-// emit events based on the type of facebook event being received
-adapter.use(new FacebookEventTypeMiddleware());
 
 
 const controller = new Botkit({
@@ -68,46 +56,20 @@ const controller = new Botkit({
 
     adapter: adapter,
 
-    storage
 });
 
-if (process.env.CMS_URI) {
-    controller.usePlugin(new BotkitCMSHelper({
-        uri: process.env.CMS_URI,
-        token: process.env.CMS_TOKEN,
-    }));
-}
+adapter.use(new FacebookEventTypeMiddleware());
 
-// Once the bot has booted up its internal services, you can use them to do stuff.
-controller.ready(() => {
+controller.hears(['.*'], ['direct_message', 'direct_mention', 'mention'], async (bot, message) => {
 
-    // load traditional developer-created local custom feature modules
-    controller.loadModules(__dirname + '/features');
-
-    /* catch-all that uses the CMS to trigger dialogs */
-    if (controller.plugins.cms) {
-        controller.on('message,direct_message', async (bot, message) => {
-            let results = false;
-            results = await controller.plugins.cms.testTrigger(bot, message);
-
-            if (results !== false) {
-                // do not continue middleware!
-                return false;
-            }
-        });
-    }
-
+  await middleware.interpret(bot, message);
+  if (message.watsonError) {
+    console.log(message.watsonError);
+    await bot.reply(message, message.watsonError.description || message.watsonError.error);
+  } else if (message.watsonData && 'output' in message.watsonData) {
+    await bot.reply(message, message.watsonData.output.text.join('\n'));
+  } else {
+    console.log('Error: received message in unknown format. (Is your connection with Watson Assistant up and running?)');
+    await bot.reply(message, 'I\'m sorry, but for technical reasons I can\'t respond to your message');
+  }
 });
-
-
-
-controller.webserver.get('/', (req, res) => {
-
-    res.send(`This app is running Botkit ${ controller.version }.`);
-
-});
-
-
-
-
-
